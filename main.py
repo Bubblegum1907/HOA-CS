@@ -4,65 +4,285 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 
 from algorithms.hoa_base import HOA
-from algorithms.cs_base import cuckoo_search
+from algorithms.cs_base import cuckoo_search, CuckooSearch
 from algorithms.hybrid import HybridHOACS
 from benchmarks.NN_trainer import SimpleNN, nn_objective_function
+from benchmarks.cec2014 import get_function, FUNCTION_INFO
+from benchmarks.cec2017 import get_function, FUNCTION_INFO
+from algorithms.comparison_algorithms import COMPARISON_ALGORITHMS
 from utils.visualisation import plot_convergence, plot_accuracy_comparison
 
-digits = load_digits()
-X, y_raw = digits.data, digits.target.reshape(-1, 1)
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
-scaler = StandardScaler()
-X = scaler.fit_transform(X)
+# =============================================================================
+# CONFIG
+# =============================================================================
 
-encoder = OneHotEncoder(sparse_output=False)
-y = encoder.fit_transform(y_raw)
+CEC_DIM       = 10
+CEC_POP_SIZE  = 50
+CEC_MAX_ITER  = 400
+CEC_LB, CEC_UB = -100, 100
+CEC_SEED      = 42
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+CEC_FUNC_IDS  = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+CEC2017_FUNC_IDS = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
 
-input_dim = 64 
-hidden_dim = 32 
-output_dim = 10 
-
-nn_model = SimpleNN(input_dim, hidden_dim, output_dim)
-dim = nn_model.total_weights 
-
-pop_size = 120 
-max_iter = 200
-lb, ub = -0.1, 0.1 
-
-def fitness_wrapper(weights):
-    return nn_objective_function(weights, nn_model, X_train, y_train)
+NN_POP_SIZE  = 120
+NN_MAX_ITER  = 200
+NN_LB, NN_UB = -1, 1
 
 
-hoa = HOA(fitness_wrapper, dim, pop_size, max_iter, lb, ub)
-_, _, hoa_curve = hoa.solve()
+ALGORITHMS = {
+    "HOA"    : lambda obj, dim, pop, itr, lb, ub: HOA(obj, dim, pop, itr, lb, ub),
+    "CS"     : lambda obj, dim, pop, itr, lb, ub: CuckooSearch(obj, dim, pop, itr, lb, ub),
+    "Hybrid" : lambda obj, dim, pop, itr, lb, ub: HybridHOACS(obj, dim, pop, itr, lb, ub),
+    **{name: (lambda cls: lambda obj, dim, pop, itr, lb, ub: cls(obj, dim, pop, itr, lb, ub))(cls)
+       for name, cls in COMPARISON_ALGORITHMS.items()}
+}
 
-cs = cuckoo_search(fitness_wrapper, dim, pop_size, max_iter, lb, ub)
-_, _, cs_curve = cs.solve()
+COLORS = {"HOA": "#7f8c8d", "CS": "#2980b9", "Hybrid": "#e74c3c"}
+LINES  = {"HOA": "--",      "CS": "-.",       "Hybrid": "-"}
 
-hybrid = HybridHOACS(fitness_wrapper, dim, pop_size, max_iter, lb, ub)
-best_weights, best_fit, hybrid_curve = hybrid.solve()
 
-def get_accuracy(weights, X_data, y_data):
-    preds = nn_model.forward(X_data, weights)
-    acc = np.mean(np.argmax(preds, axis=1) == np.argmax(y_data, axis=1))
-    return acc * 100
+# =============================================================================
+# SECTION 1 — CEC2014 Benchmark
+# =============================================================================
 
-print("-" * 30)
-print(f"HOA Final Accuracy: {get_accuracy(hoa.best_sol, X_test, y_test):.2f}%")
-print(f"CS Final Accuracy: {get_accuracy(cs.best_sol, X_test, y_test):.2f}%")
-print(f"Hybrid HOA-CS Accuracy: {get_accuracy(best_weights, X_test, y_test):.2f}%")
-print("-" * 30)
+def run_cec_benchmark():
+    print("\n" + "=" * 60)
+    print("  CEC2014 BENCHMARK")
+    print("=" * 60)
 
-curves = [hoa_curve, cs_curve, hybrid_curve]
-labels = ['HOA (Standard)', 'Cuckoo Search (Standard)', 'Hybrid HOA-CS']
+    # results[func_id][algo_name] = (best_fit, curve, error)
+    results = {fid: {} for fid in CEC_FUNC_IDS}
 
-plot_convergence(curves, labels)
+    for fid in CEC_FUNC_IDS:
+        func = get_function(fid, dim=CEC_DIM, shift=True, rotate=True, seed=CEC_SEED)
+        label, name, category = FUNCTION_INFO[fid]
+        print(f"\n  F{fid:02d} — {name} [{category}]  (bias={func.bias})")
+        print(f"  {'Algorithm':<10}  {'Best Fit':>14}  {'Error':>14}")
+        print(f"  {'-'*10}  {'-'*14}  {'-'*14}")
 
-final_accs = [
-    get_accuracy(hoa.best_sol, X_test, y_test),
-    get_accuracy(cs.best_sol, X_test, y_test),
-    get_accuracy(best_weights, X_test, y_test)
-]
-plot_accuracy_comparison(final_accs, labels)
+        for algo_name, factory in ALGORITHMS.items():
+            solver = factory(func, CEC_DIM, CEC_POP_SIZE, CEC_MAX_ITER, CEC_LB, CEC_UB)
+            _, best_fit, curve = solver.solve()
+            error = best_fit - func.bias
+            results[fid][algo_name] = (best_fit, curve, error)
+            print(f"  {algo_name:<10}  {best_fit:>14.4f}  {error:>14.4f}")
+
+    return results
+
+
+def plot_cec_convergence(results):
+    """One convergence subplot per tested CEC function."""
+    n = len(CEC_FUNC_IDS)
+    ncols = 4
+    nrows = (n + ncols - 1) // ncols
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 4, nrows * 3.2))
+    axes = axes.flatten()
+
+    for ax_idx, fid in enumerate(CEC_FUNC_IDS):
+        ax = axes[ax_idx]
+        _, name, category = FUNCTION_INFO[fid]
+
+        for algo_name in ALGORITHMS:
+            _, curve, _ = results[fid][algo_name]
+            ax.plot(curve,
+                    label=algo_name,
+                    color=COLORS[algo_name],
+                    linestyle=LINES[algo_name],
+                    linewidth=1.8 if algo_name == "Hybrid" else 1.3)
+
+        ax.set_title(f"F{fid} — {name[:28]}", fontsize=8, fontweight="bold")
+        ax.set_xlabel("Iteration", fontsize=7)
+        ax.set_ylabel("Fitness", fontsize=7)
+        ax.set_yscale("log")
+        ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+        ax.tick_params(labelsize=7)
+        ax.grid(True, which="both", alpha=0.3)
+        ax.legend(fontsize=6, loc="upper right")
+
+    # Hide any spare subplots
+    for ax in axes[len(CEC_FUNC_IDS):]:
+        ax.set_visible(False)
+
+    fig.suptitle(f"CEC2014 Convergence Comparison  (dim={CEC_DIM})",
+                 fontsize=13, fontweight="bold", y=1.01)
+    plt.tight_layout()
+    plt.savefig("cec2014_convergence.png", dpi=200, bbox_inches="tight")
+    plt.show()
+    print("\n  Saved → cec2014_convergence.png")
+
+
+def plot_cec_error_bars(results):
+    """Grouped bar chart of log-error per function for each algorithm."""
+    fids   = CEC_FUNC_IDS
+    algo_names = list(ALGORITHMS.keys())
+    n_funcs = len(fids)
+    n_algos = len(algo_names)
+    x = np.arange(n_funcs)
+    width = 0.25
+
+    fig, ax = plt.subplots(figsize=(max(10, n_funcs * 0.9), 5))
+
+    for i, algo_name in enumerate(algo_names):
+        errors = [max(results[fid][algo_name][2], 1e-10) for fid in fids]
+        bars = ax.bar(x + i * width, errors, width,
+                      label=algo_name,
+                      color=COLORS[algo_name],
+                      alpha=0.85)
+
+    ax.set_yscale("log")
+    ax.set_xticks(x + width)
+    ax.set_xticklabels([f"F{fid}" for fid in fids], fontsize=9)
+    ax.set_ylabel("Error (log scale, lower is better)", fontsize=10)
+    ax.set_title(f"CEC2014 Error Comparison  (dim={CEC_DIM}, iter={CEC_MAX_ITER})",
+                 fontsize=12, fontweight="bold")
+    ax.legend(fontsize=9)
+    ax.grid(axis="y", which="both", alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig("cec2014_error_comparison.png", dpi=200)
+    plt.show()
+    print("  Saved → cec2014_error_comparison.png")
+
+def run_cec2017_benchmark():
+    from benchmarks.cec2017 import get_function as get_f17, FUNCTION_INFO as INFO_17
+    
+    print("\n" + "=" * 60)
+    print("  CEC2017 BENCHMARK")
+    print("=" * 60)
+
+    results = {fid: {} for fid in CEC2017_FUNC_IDS}
+
+    for fid in CEC2017_FUNC_IDS:
+        # Load CEC2017 specific function
+        func = get_f17(fid, dim=CEC_DIM, shift=True, rotate=True, seed=CEC_SEED)
+        label, name, category = INFO_17[fid]
+        
+        print(f"\n  F{fid:02d} — {name} [{category}]")
+        print(f"  {'Algorithm':<10}  {'Best Fit':>14}  {'Error':>14}")
+        print(f"  {'-'*10}  {'-'*14}  {'-'*14}")
+
+        for algo_name, factory in ALGORITHMS.items():
+            solver = factory(func, CEC_DIM, CEC_POP_SIZE, CEC_MAX_ITER, CEC_LB, CEC_UB)
+            _, best_fit, curve = solver.solve()
+            
+            # Error is usually calculated as (Result - Bias)
+            error = best_fit - func.bias
+            results[fid][algo_name] = (best_fit, curve, error)
+            print(f"  {algo_name:<10}  {best_fit:>14.4f}  {error:>14.4e}")
+
+    return results
+
+def plot_cec_generic_convergence(results, func_ids, info_dict, title, filename):
+    """Generalized plotting for both 2014 and 2017."""
+    n = len(func_ids)
+    ncols = 5
+    nrows = (n + ncols - 1) // ncols
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3.5, nrows * 3))
+    axes = axes.flatten()
+
+    for ax_idx, fid in enumerate(func_ids):
+        ax = axes[ax_idx]
+        _, name, _ = info_dict[fid]
+
+        for algo_name in ALGORITHMS:
+            _, curve, _ = results[fid][algo_name]
+            ax.plot(curve, label=algo_name, color=COLORS[algo_name], 
+                    linestyle=LINES[algo_name], alpha=0.9)
+
+        ax.set_title(f"F{fid}: {name[:20]}", fontsize=8)
+        ax.set_yscale("log")
+        ax.grid(True, alpha=0.2)
+        if ax_idx == 0: ax.legend(fontsize=6)
+
+    for ax in axes[len(func_ids):]: ax.set_visible(False)
+    fig.suptitle(title, fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150)
+    plt.show()
+
+# =============================================================================
+# SECTION 2 — NN Weight Optimisation on Digits
+# =============================================================================
+
+def run_nn_benchmark():
+    print("\n" + "=" * 60)
+    print("  NN WEIGHT OPTIMISATION BENCHMARK  (sklearn Digits)")
+    print("=" * 60)
+
+    digits = load_digits()
+    X, y_raw = digits.data, digits.target.reshape(-1, 1)
+
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    encoder = OneHotEncoder(sparse_output=False)
+    y = encoder.fit_transform(y_raw)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.3, random_state=42
+    )
+
+    nn_model = SimpleNN(64, 32, 10)
+    dim = nn_model.total_weights
+
+    def fitness_wrapper(weights):
+        return nn_objective_function(weights, nn_model, X_train, y_train)
+
+    def get_accuracy(weights, X_data, y_data):
+        preds = nn_model.forward(X_data, weights)
+        return np.mean(np.argmax(preds, axis=1) == np.argmax(y_data, axis=1)) * 100
+
+    nn_results = {}
+
+    for algo_name, factory in ALGORITHMS.items():
+        solver = factory(fitness_wrapper, dim, NN_POP_SIZE, NN_MAX_ITER, NN_LB, NN_UB)
+        best_sol, best_fit, curve = solver.solve()
+        acc = get_accuracy(best_sol, X_test, y_test)
+        nn_results[algo_name] = {"sol": best_sol, "fit": best_fit,
+                                 "curve": curve, "acc": acc}
+
+    print("\n  " + "-" * 36)
+    for algo_name, r in nn_results.items():
+        print(f"  {algo_name:<10}  Accuracy: {r['acc']:.2f}%   Loss: {r['fit']:.6f}")
+    print("  " + "-" * 36)
+
+    # Convergence plot (reuse your existing util)
+    curves = [nn_results[a]["curve"] for a in ALGORITHMS]
+    labels = list(ALGORITHMS.keys())
+    plot_convergence(curves, labels, title="NN Weight Optimisation — Convergence")
+
+    # Accuracy bar chart
+    accs = [nn_results[a]["acc"] for a in ALGORITHMS]
+    plot_accuracy_comparison(accs, labels)
+
+    return nn_results
+
+
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
+
+if __name__ == "__main__":
+    from benchmarks.cec2014 import FUNCTION_INFO as INFO_14
+    from benchmarks.cec2017 import FUNCTION_INFO as INFO_17
+
+    # --- CEC 2014 ---
+    results_14 = run_cec_benchmark()
+    plot_cec_generic_convergence(results_14, CEC_FUNC_IDS, INFO_14, 
+                                 "CEC2014 Convergence Comparison", "cec2014_convergence.png")
+    plot_cec_error_bars(results_14) 
+
+    # --- CEC 2017 ---
+    results_17 = run_cec2017_benchmark()
+    plot_cec_generic_convergence(results_17, CEC2017_FUNC_IDS, INFO_17, 
+                                 "CEC2017 Convergence Comparison", "cec2017_convergence.png")
+
+    nn_results = run_nn_benchmark()
+    
+    print("\n[✔] All benchmarks completed and plots saved.")
