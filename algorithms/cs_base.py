@@ -26,7 +26,7 @@ def cuckoo_search(obj_func, dim, pop_size=25, max_iter=100, lb=-5, ub=5, pa=0.25
     convergence_curve = []
 
     for t in range(max_iter):
-        # Step A — Lévy flight on one random nest
+        # Lévy flight on one random nest
         i     = np.random.randint(0, pop_size)
         alpha = bound_range * (0.01 - 0.009 * t / max_iter)
         new_nest = nests[i] + alpha * levy_flight(dim) * (nests[i] - best_sol)
@@ -37,7 +37,7 @@ def cuckoo_search(obj_func, dim, pop_size=25, max_iter=100, lb=-5, ub=5, pa=0.25
         if f_new < fitness[j]:
             nests[j], fitness[j] = new_nest, f_new
 
-        # Step B — Abandon fraction pa of nests (vectorised)
+        # Abandon fraction pa of nests
         mask      = np.random.rand(pop_size) < pa
         if mask.any():
             r1, r2    = np.random.randint(0, pop_size, pop_size), \

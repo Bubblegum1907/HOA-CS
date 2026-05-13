@@ -49,3 +49,4 @@ desktop.ini
 # dotenv
 .env
 .env.local
+results/

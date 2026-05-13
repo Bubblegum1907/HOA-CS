@@ -18,23 +18,21 @@ from algorithms.cs_base import CuckooSearch
 from algorithms.hybrid import HybridHOACS
 from algorithms.comparison_algorithms import COMPARISON_ALGORITHMS
 
-# =============================================================================
 # CONFIG
-# =============================================================================
 
-BENCHMARK_YEAR = 2017  # Toggle: 2014 or 2017
-N_RUNS   = 15          # Increased for statistical credibility in vivas
+BENCHMARK_YEAR = 2014  # Toggle: 2014 or 2017
+N_RUNS   = 15
 DIM      = 10
 LB, UB   = -100, 100
 CEC_SEED = 42
 
-# Select representative functions (Skipping bugged F2 for 2017)
+# Select representative functions
 if BENCHMARK_YEAR == 2014:
     from benchmarks.cec2014 import get_function, FUNCTION_INFO
-    FUNC_IDS = [1, 3, 5, 7, 10, 12, 14, 17, 19, 21]
+    FUNC_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
 else:
     from benchmarks.cec2017 import get_function, FUNCTION_INFO
-    FUNC_IDS = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    FUNC_IDS = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
 
 OUTPUT_DIR = "results"
 
@@ -43,9 +41,7 @@ HOA_POP,    HOA_ITER    = 30, 666
 HYBRID_POP, HYBRID_ITER = 30, 666
 OTHER_POP,  OTHER_ITER  = 30, 2000
 
-# =============================================================================
 # Algorithm Registry
-# =============================================================================
 
 def make_solver(name, cls, obj_func):
     if name in ["HOA", "Hybrid"]:
@@ -60,9 +56,7 @@ ALL_ALGORITHMS = {
 }
 ALGO_NAMES = list(ALL_ALGORITHMS.keys())
 
-# =============================================================================
 # Core Runner
-# =============================================================================
 
 def run_all(verbose=True):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -87,7 +81,6 @@ def run_all(verbose=True):
                 np.random.seed(run * 1000 + fid) # Reproducibility
                 solver = make_solver(algo_name, cls, func)
                 _, best_fit, _ = solver.solve()
-                # Correct for minor precision bias
                 run_errors.append(max(best_fit - func.bias, 0.0))
 
             errors[ai, fi, :] = run_errors
@@ -100,9 +93,7 @@ def run_all(verbose=True):
     np.save(os.path.join(OUTPUT_DIR, f"raw_errors_cec{BENCHMARK_YEAR}.npy"), errors)
     return errors
 
-# =============================================================================
 # Statistical Analysis (Wilcoxon)
-# =============================================================================
 
 def build_wilcoxon_table(errors):
     hi = ALGO_NAMES.index("Hybrid")
@@ -117,7 +108,6 @@ def build_wilcoxon_table(errors):
             
             target_err = errors[ai, fi, :]
             
-            # Handle cases with zero variance
             if np.array_equal(h_err, target_err):
                 wt[fid][name] = (0.0, 1.0, "=")
                 continue
@@ -138,9 +128,7 @@ def build_wilcoxon_table(errors):
             wt[fid][name] = (stat, p, sym)
     return wt
 
-# =============================================================================
 # Export Report
-# =============================================================================
 
 def export_txt_report(errors, wt):
     path = os.path.join(OUTPUT_DIR, f"final_report_cec{BENCHMARK_YEAR}.txt")

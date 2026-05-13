@@ -1,5 +1,5 @@
 """
-Seven comparison algorithms — all post-2021, peer-reviewed, vectorised.
+Seven comparison algorithms: all post-2021, peer-reviewed, vectorised.
 Interface: solver = Algo(obj_func, dim, pop_size, max_iter, lb, ub)
            best_sol, best_fit, curve = solver.solve()
 """
@@ -8,9 +8,7 @@ import numpy as np
 from math import gamma as _gamma
 
 
-# =============================================================================
 # Shared helpers
-# =============================================================================
 
 def _setup(pop_size, dim, lb, ub, obj_func):
     lb = np.full(dim, lb) if np.isscalar(lb) else np.array(lb)
@@ -43,9 +41,7 @@ def _update(X, F, X_new, obj_func):
     F[improved] = F_new[improved]
 
 
-# =============================================================================
-# 1. Dandelion Optimiser (DO) — Zhao et al., 2022
-# =============================================================================
+# 1. Dandelion Optimiser (DO)
 
 class DandelionOptimiser:
     def __init__(self, obj_func, dim, pop_size=30, max_iter=100, lb=-100, ub=100):
@@ -85,9 +81,7 @@ class DandelionOptimiser:
         return self.best_sol, self.best_fit, curve
 
 
-# =============================================================================
-# 2. Equilibrium Optimizer (EO) — Faramarzi et al., 2020/2021
-# =============================================================================
+# 2. Equilibrium Optimizer (EO)
 
 class EquilibriumOptimizer:
     def __init__(self, obj_func, dim, pop_size=30, max_iter=100, lb=-100, ub=100):
@@ -120,9 +114,7 @@ class EquilibriumOptimizer:
         return self.best_sol, self.best_fit, curve
 
 
-# =============================================================================
-# 3. RIME — Su et al., 2023
-# =============================================================================
+# 3. RIME
 
 class RIME:
     def __init__(self, obj_func, dim, pop_size=30, max_iter=100, lb=-100, ub=100):
@@ -137,12 +129,12 @@ class RIME:
             E     = np.sqrt(t / self.T)
             X_new = self.X.copy()
 
-            # Soft rime — random dims move toward best
+            # Soft random dims move toward best
             mask  = np.random.rand(self.n, self.dim) < E
             noise = w * np.random.randn(self.n, self.dim) * (1 - t / self.T)
             X_new[mask] = (np.broadcast_to(self.best_sol, (self.n, self.dim)) + noise)[mask]
 
-            # Hard rime — replace dims with prob based on normalised fitness
+            # replace dims with prob based on normalised fitness
             norm_f    = self.F / (self.best_fit + 1e-10)
             hard_prob = 1 / (1 + np.exp(-norm_f))
             hmask     = np.random.rand(self.n, self.dim) < hard_prob[:, None]
@@ -156,9 +148,7 @@ class RIME:
         return self.best_sol, self.best_fit, curve
 
 
-# =============================================================================
 # 4. Fox Optimiser (FOX) — Mohammed & Rashid, 2023
-# =============================================================================
 
 class FoxOptimiser:
     def __init__(self, obj_func, dim, pop_size=30, max_iter=100, lb=-100, ub=100):
@@ -195,9 +185,7 @@ class FoxOptimiser:
         return self.best_sol, self.best_fit, curve
 
 
-# =============================================================================
 # 5. Giant Trevally Optimizer (GTO) — Sadiq et al., 2022
-# =============================================================================
 
 class GiantTrevallyOptimizer:
     def __init__(self, obj_func, dim, pop_size=30, max_iter=100, lb=-100, ub=100):
@@ -241,9 +229,7 @@ class GiantTrevallyOptimizer:
         return self.best_sol, self.best_fit, curve
 
 
-# =============================================================================
-# 6. Aquila Optimiser (AO) — Abualigah et al., 2021
-# =============================================================================
+# 6. Aquila Optimiser (AO)
 
 class AquilaOptimiser:
     def __init__(self, obj_func, dim, pop_size=30, max_iter=100, lb=-100, ub=100):
@@ -287,9 +273,7 @@ class AquilaOptimiser:
         return self.best_sol, self.best_fit, curve
 
 
-# =============================================================================
-# 7. African Vultures Optimisation (AVOA) — Abdollahzadeh et al., 2022
-# =============================================================================
+# African Vultures Optimisation
 
 class AfricanVulturesOptimisation:
     def __init__(self, obj_func, dim, pop_size=30, max_iter=100, lb=-100, ub=100):
@@ -353,9 +337,7 @@ class AfricanVulturesOptimisation:
         return self.best_sol, self.best_fit, curve
 
 
-# =============================================================================
 # Registry
-# =============================================================================
 
 COMPARISON_ALGORITHMS = {
     "DO"   : DandelionOptimiser,

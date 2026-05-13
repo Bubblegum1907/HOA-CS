@@ -4,8 +4,8 @@ from algorithms.cs_base import levy_flight
 
 class HybridHOACS:
     """
-    Hybrid HOA + Cuckoo Search — vectorised.
-    Early iterations: best 40% explore via Lévy, rest do HOA river move.
+    Hybrid HOA + Cuckoo Search.
+    Early iterations: best 40% explore via Levy, rest do HOA river move.
     Late iterations:  best 40% exploit via HOA local search, rest forage.
     Stagnation: scatter worst 20% only.
     """
@@ -52,24 +52,24 @@ class HybridHOACS:
             X_new = self.X.copy()
 
             if in_exploration:
-                # Best agents — Lévy flight
+                # Best agents - Levy flight
                 alpha = self.bound_range * (0.01 - 0.009 * t / self.max_iter)
                 for i in best_idx:
                     step     = levy_flight(self.dim)
                     X_new[i] = self.X[i] + alpha * step * (self.X[i] - self.best_sol)
 
-                # Rest — HOA river move
+                # Rest - HOA river move
                 I = np.random.randint(1, 3, (len(rest_idx), 1))
                 r = np.random.rand(len(rest_idx), 1)
                 X_new[rest_idx] = self.X[rest_idx] + \
                                   r * (self.best_sol - I * self.X[rest_idx])
             else:
-                # Best agents — HOA shrinking local search
+                # Best agents - HOA shrinking local search
                 radius = 2 * (1 - t / self.max_iter)
                 X_new[best_idx] = self.X[best_idx] + \
                     np.random.uniform(-1, 1, (top_n, self.dim)) * radius
 
-                # Rest — HOA foraging
+                # Rest - HOA foraging
                 r_idx = np.random.randint(0, self.pop_size, len(rest_idx))
                 r     = np.random.rand(len(rest_idx), 1)
                 X_new[rest_idx] = self.X[rest_idx] + \
@@ -78,7 +78,7 @@ class HybridHOACS:
             X_new = np.clip(X_new, self.lb, self.ub)
             self._eval_candidates(X_new, range(self.pop_size))
 
-            # Stagnation scatter — worst 20% only
+            # Stagnation scatter - worst 20% only
             if self.stagnation_counter >= self.stagnation_limit:
                 for i in worst_idx:
                     self.X[i]       = np.random.uniform(self.lb, self.ub)
